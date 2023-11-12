@@ -1,3 +1,19 @@
+# RISC: Global Domination
+Cheating in video games has accelerated in advancement – now, players employ methods such as bots and software assistance to perform automated target acquisition and calibration, lag switches, and world-hacking. The vision of autonomous worlds is enabled only by provability of all in-game actions. Players must be able to prove ownership and milestone-based achievements in order for the autonomous world itself to create digital scarcity and programmable ruleset based environments independent of control from a centralized authority. In this project, we build the foundation for autonomous worlds by using Bonsai to prove gameplay.
+
+A Nintendo Entertainment System (NES) emulator is a software that allows a computer, smartphone, or other device to emulate both the hardware and software of the original Nintendo Entertainment System. This enables the play of classic NES games on platforms other than the original NES console. The emulator translates NES game code so that it can run on modern devices.
+
+RISC: Global Domination is a NES emulator that uses Risc0 Bonsai to generate proofs to verify gameplay. When the user plays the game, the NES emulator has a buffer that keeps track of all instructions executed. In this project, the CPU is the circuirt and the inputs are the operations. The host writes the input, reads the input, and applies the operated return. The host then passes the inputs to the prover. Later, the host can keep writing the CPU and operation to this. Functionally, the project creates a zk NES CPU with Bonsai. 
+
+This delivers the primary benefits:
+
+1) Preserve Fun and Functionality: There are two general approaches to on-chain gaming–crypto native games for crypto native gamers or replicating traditional games on chain. This project caters to the latter and is an example of maintaining playability of traditional games without needlessly inserting a token/tokenomics. It is simply proving reputation (in-game achievements, milestones, actions) of a game with which players are already familiar.
+
+2) Provability: Players can prove that in-game achievements and milestones were honestly accomplished without revealing how different milestones were achieved. 
+
+_Acknowledgements
+Project inspired by Tonk’s Dappicom and to takahirox for nes-rust._
+
 # RISC Zero Rust Starter Template
 
 Welcome to the RISC Zero Rust Starter Template! This template is intended to
