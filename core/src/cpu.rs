@@ -1,5 +1,3 @@
-use crate::apu::Apu;
-use crate::audio::Audio;
 use crate::button;
 use crate::display::Display;
 use crate::input::Input;
@@ -9,6 +7,8 @@ use crate::memory::Memory;
 use crate::ppu::Ppu;
 use crate::register::Register;
 use crate::rom::{Rom, HEADER_SIZE};
+
+use serde::{Serialize, Deserialize};
 
 fn to_joypad_button(button: button::Button) -> joypad::Button {
     match button {
@@ -28,6 +28,7 @@ fn to_joypad_button(button: button::Button) -> joypad::Button {
  * Ricoh 6502
  * Refer to https://wiki.nesdev.com/w/index.php/CPU
  */
+#[derive(Serialize, Deserialize)]
 pub struct Cpu {
     power_on: bool,
 
@@ -45,11 +46,8 @@ pub struct Cpu {
     // manage additional stall cycles eg. DMA or branch success
     stall_cycles: u16,
 
-    input: Box<dyn Input>,
-
     // other devices
     ppu: Ppu,
-    apu: Apu,
     joypad1: Joypad,
     joypad2: Joypad,
     rom: Rom,
@@ -73,6 +71,7 @@ fn interrupt_handler_address(interrupt_type: Interrupts) -> u16 {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 enum InstructionTypes {
     INV,
     ADC,
@@ -195,6 +194,7 @@ fn instruction_name(instruction_type: InstructionTypes) -> &'static str {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 enum AddressingModes {
     Immediate,
     Absolute,
@@ -211,6 +211,7 @@ enum AddressingModes {
     Relative,
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct Operation {
     instruction_type: InstructionTypes,
     cycle: u8,
@@ -1089,7 +1090,7 @@ pub fn operation(opc: u8) -> Operation {
 }
 
 impl Cpu {
-    pub fn new(input: Box<dyn Input>, display: Box<dyn Display>, audio: Box<dyn Audio>) -> Self {
+    pub fn new(input: Box<dyn Input>, display: Box<dyn Display>) -> Self {
         Cpu {
             power_on: false,
             pc: Register::<u16>::new(),
@@ -1100,9 +1101,7 @@ impl Cpu {
             p: CpuStatusRegister::new(),
             ram: Memory::new(vec![0; 64 * 1024]), // 64KB
             stall_cycles: 0,
-            input: input,
             ppu: Ppu::new(display),
-            apu: Apu::new(audio),
             joypad1: Joypad::new(),
             joypad2: Joypad::new(),
             rom: Rom::new(vec![0; HEADER_SIZE]), // dummy
@@ -1117,7 +1116,6 @@ impl Cpu {
         self.power_on = true;
         self.bootup_internal();
         self.ppu.bootup();
-        self.apu.bootup();
     }
 
     fn bootup_internal(&mut self) {
@@ -1140,7 +1138,6 @@ impl Cpu {
     pub fn reset(&mut self) {
         self.reset_internal();
         self.ppu.reset();
-        self.apu.reset();
         self.interrupt(Interrupts::RESET);
     }
 
@@ -1157,14 +1154,6 @@ impl Cpu {
         &self.ppu
     }
 
-    pub fn get_mut_apu(&mut self) -> &mut Apu {
-        &mut self.apu
-    }
-
-    pub fn get_mut_input(&mut self) -> &mut Box<dyn Input> {
-        &mut self.input
-    }
-
     pub fn get_mut_cpu(&mut self) -> &mut Cpu {
         self
     }
@@ -1176,63 +1165,16 @@ impl Cpu {
         for _i in 0..stall_cycles * 3 {
             self.ppu.step(&mut self.rom);
         }
-        for _i in 0..stall_cycles {
-            // No reference to CPU from APU so detecting if APU DMC needs
-            // CPU memory data, loading data, and sending to APU if needed
-            // @TODO: Simplify
-            let dmc_sample_data = match self.apu.dmc_needs_cpu_memory_data() {
-                true => {
-                    // The CPU is stalled for up to 4 CPU cycles
-                    // @TODO: Fix me
-                    self.stall_cycles += 4;
-                    self.load(self.apu.dmc_sample_address())
-                }
-                false => 0,
-            };
-            self.apu.step(dmc_sample_data);
-        }
     }
 
     pub fn step_frame(&mut self) {
         // Input handling should be here? Or under nes.rs?
-        self.handle_inputs();
         // @TODO: More precise frame update detection?
         let ppu_frame = self.ppu.frame;
         loop {
             self.step();
             if ppu_frame != self.ppu.frame {
                 break;
-            }
-        }
-    }
-
-    fn handle_inputs(&mut self) {
-        while let Some((button, event)) = self.input.get_input() {
-            match button {
-                button::Button::Poweroff => {
-                    self.power_on = false;
-                }
-                button::Button::Reset => {
-                    self.reset();
-                }
-                button::Button::Select
-                | button::Button::Start
-                | button::Button::Joypad1A
-                | button::Button::Joypad1B
-                | button::Button::Joypad1Up
-                | button::Button::Joypad1Down
-                | button::Button::Joypad1Left
-                | button::Button::Joypad1Right => {
-                    self.joypad1.handle_input(to_joypad_button(button), event);
-                }
-                button::Button::Joypad2A
-                | button::Button::Joypad2B
-                | button::Button::Joypad2Up
-                | button::Button::Joypad2Down
-                | button::Button::Joypad2Left
-                | button::Button::Joypad2Right => {
-                    self.joypad2.handle_input(to_joypad_button(button), event);
-                }
             }
         }
     }
@@ -1245,10 +1187,6 @@ impl Cpu {
         }
         if self.ppu.irq_interrupted {
             self.ppu.irq_interrupted = false;
-            self.interrupt(Interrupts::IRQ);
-        }
-        if self.apu.irq_interrupted {
-            self.apu.irq_interrupted = false;
             self.interrupt(Interrupts::IRQ);
         }
 
@@ -1723,7 +1661,6 @@ impl Cpu {
         }
     }
 
-    #[cfg(not(target_os = "zkvm"))]
     pub fn operate_return(&mut self, op: &Operation) -> &mut Cpu {
         match op.instruction_type {
             InstructionTypes::ADC => {
@@ -2172,16 +2109,9 @@ impl Cpu {
             return self.ppu.load_register(address & 0x2007, &self.rom);
         }
 
-        if address >= 0x4000 && address < 0x4014 {
-            return self.apu.load_register(address);
-        }
 
         if address == 0x4014 {
             return self.ppu.load_register(address, &self.rom);
-        }
-
-        if address == 0x4015 {
-            return self.apu.load_register(address);
         }
 
         if address == 0x4016 {
@@ -2192,20 +2122,12 @@ impl Cpu {
             return self.joypad2.load_register();
         }
 
-        if address >= 0x4017 && address < 0x4020 {
-            return self.apu.load_register(address);
-        }
-
         if address >= 0x4020 && address < 0x6000 {
             return self.ram.load(address as u32);
         }
 
         if address >= 0x6000 && address < 0x8000 {
             return self.ram.load(address as u32);
-        }
-
-        if address >= 0x8000 {
-            return self.rom.load(address as u32);
         }
 
         0 // dummy
@@ -2246,10 +2168,6 @@ impl Cpu {
                 .store_register(address & 0x2007, value, &mut self.rom);
         }
 
-        if address >= 0x4000 && address < 0x4014 {
-            self.apu.store_register(address, value);
-        }
-
         // @TODO: clean up
 
         if address == 0x4014 {
@@ -2268,17 +2186,9 @@ impl Cpu {
             self.stall_cycles += 514;
         }
 
-        if address == 0x4015 {
-            self.apu.store_register(address, value);
-        }
-
         if address == 0x4016 {
             self.joypad1.store_register(value);
             self.joypad2.store_register(value); // to clear the joypad2 state
-        }
-
-        if address >= 0x4017 && address < 0x4020 {
-            self.apu.store_register(address, value);
         }
 
         // cartridge space
@@ -2294,10 +2204,6 @@ impl Cpu {
         }
 
         // 0x8000 - 0xFFFF: ROM
-
-        if address >= 0x8000 {
-            self.rom.store(address as u32, value);
-        }
     }
 
     pub fn interrupt(&mut self, interrupt_type: Interrupts) {
@@ -2648,6 +2554,7 @@ impl Cpu {
     }
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct CpuStatusRegister {
     register: Register<u8>,
 }

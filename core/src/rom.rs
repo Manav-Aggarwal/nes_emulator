@@ -1,10 +1,12 @@
 use crate::memory::Memory;
 use crate::mapper::{Mapper, MapperFactory};
+use serde::{Serialize, Deserialize};
 
+
+#[derive(Serialize, Deserialize)]
 pub struct Rom {
 	header: RomHeader,
 	memory: Memory,
-	mapper: Box<dyn Mapper>
 }
 
 pub static HEADER_SIZE: usize = 16;
@@ -23,7 +25,6 @@ impl Rom {
 		Rom {
 			header: header,
 			memory: Memory::new(data[HEADER_SIZE..].to_vec()),
-			mapper: mapper
 		}
 	}
 
@@ -36,28 +37,7 @@ impl Rom {
 	 * Mapper maps CPU memory address to ROM's.
 	 * In general writing control registers in Mapper via .store() switches bank.
 	 */
-	pub fn load(&self, address: u32) -> u8 {
-		let mut address_in_rom = 0 as u32;
-		if address < 0x2000 {
-			// load from character rom
-			address_in_rom += self.header.prg_rom_bank_num() as u32 * 0x4000;
-			address_in_rom += self.mapper.map_for_chr_rom(address);
-		} else {
-			address_in_rom += self.mapper.map(address);
-		}
-		self.memory.load(address_in_rom)
-	}
-
-	pub fn load_without_mapping(&self, address: u32) -> u8 {
-		self.memory.load(address)
-	}
-
-	/**
-	 * In general writing with ROM address space updates control registers in Mapper.
-	 */
-	pub fn store(&mut self, address: u32, value: u8) {
-		self.mapper.store(address, value);
-	}
+	
 
 	pub fn valid(&self) -> bool {
 		self.header.is_nes()
@@ -67,20 +47,10 @@ impl Rom {
 		self.header.has_chr_rom()
 	}
 
-	pub fn mirroring_type(&self) -> Mirrorings {
-		match self.mapper.has_mirroring_type() {
-			true => self.mapper.mirroring_type(),
-			false => self.header.mirroring_type()
-		}
-	}
-
-	// @TODO: MMC3Mapper specific. Should this method be here?
-	pub fn irq_interrupted(&mut self) -> bool {
-		self.mapper.drive_irq_counter()
-	}
 }
 
 // @TODO: Cache
+#[derive(Serialize, Deserialize)]
 pub struct RomHeader {
 	data: Vec<u8>
 }
@@ -198,18 +168,6 @@ mod tests_rom {
 	#[test]
 	fn initialize() {
 		let r = Rom::new(vec![0; 17]);
-	}
-
-	#[test]
-	fn load() {
-		let r = Rom::new(vec![0; 17]);
-		assert_eq!(0, r.load(0));
-	}
-
-	#[test]
-	fn store() {
-		let mut r = Rom::new(vec![0; 17]);
-		r.store(0, 0);
 	}
 
 	#[test]

@@ -18,12 +18,11 @@
 risc0_zkvm::guest::entry!(main);
 
 use risc0_zkvm::guest::env;
-use wasmi::{Caller, Engine, Func, Linker, Module, Store};
-use nest_rust_core::cpu::{Cpu, Operation};
+use nes_rust_core::cpu::{Cpu, Operation};
 
 pub fn main() {
-    let cpu: Cpu = env::read();
+    let mut cpu: Cpu = env::read();
     let operation: Operation = env::read();
-    let new_cpu = cpu.operate_return(operation);
+    let new_cpu = cpu.operate_return(&operation);
     env::commit(new_cpu);
 }

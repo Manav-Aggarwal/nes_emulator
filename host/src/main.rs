@@ -14,12 +14,11 @@
 
 use risc0_zkvm::{default_prover, ExecutorEnv};
 use nes_emulator_methods::{NES_EMULATOR_INTERP_ELF, NES_EMULATOR_INTERP_ID};
-use nes_rust_core::cpu::{Cpu, operation};
+use nes_rust_core::cpu::{Cpu, Operation, operation};
 use nes_rust_core::default_input::DefaultInput;
-use nes_rust_core::default_audio::DefaultAudio;
 use nes_rust_core::default_display::DefaultDisplay;
 
-fn run_guest(&mut cpu: Cpu, operation: Operation) -> cpu {
+fn run_guest(cpu: &mut Cpu, op: Operation) -> Cpu {
     let env = ExecutorEnv::builder()
         .write(&cpu)
         .unwrap()
@@ -37,7 +36,7 @@ fn run_guest(&mut cpu: Cpu, operation: Operation) -> cpu {
     receipt.verify(NES_EMULATOR_INTERP_ID).expect(
         "Code you have proven should successfully verify; did you specify the correct image ID?",
     );
-    let result: cpu = receipt.journal.decode().unwrap();
+    let result: Cpu = receipt.journal.decode().unwrap();
 
     result
 }
@@ -45,11 +44,10 @@ fn run_guest(&mut cpu: Cpu, operation: Operation) -> cpu {
 fn main() {
     let input = Box::new(DefaultInput::new());
     let display = Box::new(DefaultDisplay::new());
-    let audio = Box::new(DefaultAudio::new());
-    let mut cpu = Cpu::new(input, display, audio);
+    let mut cpu = Cpu::new(input, display);
     let mut_cpu: &mut Cpu= cpu.get_mut_cpu();
     let op = operation(0x01);
-    run_guest(&mut_cpu, op);
+    run_guest(mut_cpu, op);
 }
 
 #[cfg(test)]
@@ -62,8 +60,7 @@ mod tests {
     fn nes_emulate() {
         let input = Box::new(DefaultInput::new());
 		let display = Box::new(DefaultDisplay::new());
-		let audio = Box::new(DefaultAudio::new());
-        let mut cpu = Cpu::new(input, display, audio);
+        let mut cpu = Cpu::new(input, display);
         let mut_cpu: &mut Cpu= cpu.get_mut_cpu();
 
         let op = operation(0x01);

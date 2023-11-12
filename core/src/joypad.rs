@@ -1,5 +1,6 @@
 use crate::button;
 use crate::register::Register;
+use serde::{Serialize, Deserialize};
 
 const BUTTON_NUM: u8 = 8;
 
@@ -27,6 +28,7 @@ fn button_index(button: Button) -> usize {
 	}
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct Joypad {
 	register: Register<u8>,
 	latch: u8,

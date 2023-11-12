@@ -1,13 +1,15 @@
 use crate::register::Register;
 use crate::memory::Memory;
 use crate::rom::Rom;
-use crate::rom::Mirrorings;
 use crate::display::Display;
+use serde::{Serialize, Deserialize};
+
 
 /**
  * RP2A03
  * The comments about PPU spec are based on https://wiki.nesdev.com/w/index.php/PPU
  */
+#[derive(Serialize, Deserialize)]
 pub struct Ppu {
 	pub frame: u32,
 
@@ -54,11 +56,6 @@ pub struct Ppu {
 	vram: Memory,
 
 	// -- For sprites pixels
-
-	sprite_availables: [bool; 256],
-	sprite_ids: [u8; 256],
-	sprite_palette_addresses: [u16; 256],
-	sprite_priorities: [u8; 256],
 
 	// Primary OAM, holds 64 sprites for the frame
 	primary_oam: SpritesManager,
@@ -120,8 +117,6 @@ pub struct Ppu {
 	data_bus: u8,
 
 	// -- 
-
-	display: Box<dyn Display>,
 
 	pub nmi_interrupted: bool,
 	pub irq_interrupted: bool
@@ -212,10 +207,6 @@ impl Ppu {
 			pattern_table_low_latch: 0,
 			pattern_table_high_latch: 0,
 			register_first_store: true,
-			sprite_availables: [false; 256],
-			sprite_ids: [0; 256],
-			sprite_palette_addresses: [0; 256],
-			sprite_priorities: [0; 256],
 			oamaddr: Register::<u8>::new(),
 			oamdata: Register::<u8>::new(),
 			oamdma: Register::<u8>::new(),
@@ -233,7 +224,6 @@ impl Ppu {
 			attribute_table_high: Register::<u16>::new(),
 			pattern_table_low: Register::<u16>::new(),
 			pattern_table_high: Register::<u16>::new(),
-			display: display,
 			nmi_interrupted: false,
 			irq_interrupted: false
 		}
@@ -257,7 +247,6 @@ impl Ppu {
 	}
 
 	pub fn step(&mut self, rom: &mut Rom) {
-		self.render_pixel(rom);
 		self.shift_registers();
 		self.fetch(rom);
 		self.evaluate_sprites(rom);
@@ -304,27 +293,6 @@ impl Ppu {
 				let value = self.primary_oam.load(self.oamaddr.load());
 				self.data_bus = value;
 				value
-			},
-			// ppudata load
-			0x2007 => {
-				// Reading ppudata updates the VRAM read buffer with VRAM[vram_address]
-				// and returns the internal VRAM read buffer.
-				// They work differently depending on the reading address.
-				// 0x0000-0x3EFF: Update the buffer after returning the content of the buffer
-				// 0x3F00-0x3FFF: Immediately update the buffer before returning the content of the buffer
-				let value = self.load(self.current_vram_address, rom);
-				let return_value = match self.current_vram_address {
-					0..=0x3EFF => self.vram_read_buffer,
-					_ => value
-				};
-				self.vram_read_buffer = value;
-
-				// @TODO: Support greyscale if needed
-
-				// Accessing ppudata increments vram_address
-				self.increment_vram_address();
-				self.data_bus = return_value;
-				self.data_bus
 			},
 			_ => self.data_bus
 		}
@@ -419,7 +387,6 @@ impl Ppu {
 			// ppudata store
 			0x2007 => {
 				self.ppudata.store(value);
-				self.store(self.current_vram_address, value, rom);
 				// Accessing ppudata increments vram_address
 				self.increment_vram_address();
 			},
@@ -430,121 +397,6 @@ impl Ppu {
 			},
 			_ => {}
 		}
-	}
-
-	fn load(&self, mut address: u16, rom: &Rom) -> u8 {
-		address = address & 0x3FFF;  // just in case
-
-		// 0x0000 - 0x1FFF is mapped with cartridge's CHR-ROM if exists.
-		// Otherwise load from VRAM.
-
-		match address < 0x2000 && rom.has_chr_rom() {
-			true => rom.load(address as u32),
-			false => self.vram.load(self.convert_vram_address(address, rom) as u32)
-		}
-	}
-
-	fn store(&mut self, mut address: u16, value: u8, rom: &mut Rom) {
-		address = address & 0x3FFF;  // just in case
-
-		// 0x0000 - 0x1FFF is mapped with cartridge's CHR-ROM if exists.
-		// Otherwise store to VRAM.
-
-		match address < 0x2000 && rom.has_chr_rom() {
-			true => rom.store(address as u32, value),
-			false => self.vram.store(self.convert_vram_address(address, rom) as u32, value)
-		};
-	}
-
-	fn convert_vram_address(&self, address: u16, rom: &Rom) -> u16 {
-		// 0x0000 - 0x0FFF: pattern table 0
-		// 0x1000 - 0x1FFF: pattern table 1
-		// 0x2000 - 0x23FF: nametable 0
-		// 0x2400 - 0x27FF: nametable 1
-		// 0x2800 - 0x2BFF: nametable 2
-		// 0x2C00 - 0x2FFF: nametable 3
-		// 0x3000 - 0x3EFF: Mirrors of 0x2000 - 0x2EFF
-		// 0x3F00 - 0x3F1F: Palette RAM indices
-		// 0x3F20 - 0x3FFF: Mirrors of 0x3F00 - 0x3F1F
-
-		match address {
-			0..=0x1FFF => address,
-			0x2000..=0x3EFF => self.get_name_table_address_with_mirroring(address & 0x2FFF, rom),
-			_ /* 0x3F00..=0x3FFF */ => {
-				// Addresses for palette
-				// 0x3F10/0x3F14/0x3F18/0x3F1C are mirrors of
-				// 0x3F00/0x3F04/0x3F08/0x3F0C.
-				match address {
-					0x3F10 => 0x3F00,
-					0x3F14 => 0x3F04,
-					0x3F18 => 0x3F08,
-					0x3F1C => 0x3F0C,
-					_ => address
-				}
-			}
-		}
-	}
-
-	fn render_pixel(&mut self, rom: &Rom) {
-		// Note: this comparison order is for performance.
-		if self.cycle >= 257 || self.scanline >= 240 || self.cycle == 0 {
-			return;
-		}
-
-		// guaranteed that cycle is equal to or greater than 1 here, see the above
-		let x = (self.cycle - 1) % 256; // @TODO: Somehow -2 generates pixel at right position, why?
-		let y = self.scanline;
-
-		let background_visible = self.ppumask.is_background_visible() &&
-			(self.ppumask.is_left_most_background_visible() || x >= 8);
-		let sprites_visible = self.ppumask.is_sprites_visible() &&
-			(self.ppumask.is_left_most_sprites_visible() || x >= 8);
-		let background_palette_address = self.get_background_palette_address();
-		let sprite_available = self.sprite_availables[x as usize];
-		let sprite_palette_address = self.sprite_palette_addresses[x as usize];
-		let sprite_id = self.sprite_ids[x as usize];
-		let sprite_priority = self.sprite_priorities[x as usize];
-
-		let is_background_pixel_zero = !background_visible || (background_palette_address & 0x3) == 0;
-		let is_sprite_pixel_zero = !sprites_visible || !sprite_available || (sprite_palette_address & 0x3) == 0;
-
-		// Select output color
-		// |  bg | sprite | pri |        out |
-		// | --- | ------ | --- | ---------- |
-		// |   0 |      0 |   - | bg(0x3F00) |
-		// |   0 |    1-3 |   - |     sprite |
-		// | 1-3 |      0 |   - |         bg |
-		// | 1-3 |    1-3 |   0 |     sprite |
-		// | 1-3 |    1-3 |   1 |         bg |
-
-		let palette_address = match is_background_pixel_zero {
-			true => match is_sprite_pixel_zero {
-				true => 0x3F00, // universal_background_palette_address
-				false => sprite_palette_address
-			},
-			false => match is_sprite_pixel_zero {
-				true => background_palette_address,
-				false => match sprite_priority == 0 {
-					true => sprite_palette_address,
-					false => background_palette_address
-				}
-			}
-		};
-
-		let c = self.get_emphasis_color(self.load_palette(self.load(palette_address, rom)));
-
-		// Sprite zero hit test.
-		// Set zero hit flag when a nonzero pixel of sprite 0 overlaps
-		// a nonzero background pixel.
-		// Hit doesn't trigger in any area where the background or sprites are hidden.
-		// Sprite priority doesn't have effect to zero hit.
-		if sprite_id == 0 &&
-			!is_sprite_pixel_zero &&
-			!is_background_pixel_zero {
-			self.ppustatus.set_zero_hit();
-		}
-
-		self.display.render_pixel(x, y, c);
 	}
 
 	fn get_background_palette_address(&self) -> u16 {
@@ -653,7 +505,6 @@ impl Ppu {
 		// Here fetches a tile of a nametable.
 
 		// address is from http://wiki.nesdev.com/w/index.php/PPU_scrolling
-		self.name_table_latch = self.load(0x2000 | (self.current_vram_address & 0x0FFF), rom);
 	}
 
 	fn fetch_attribute_table(&mut self, rom: &Rom) {
@@ -679,7 +530,6 @@ impl Ppu {
 		// 5-3: high 3bits of coarse y
 		// 2-0: high 3bits of coarse x
 		// From http://wiki.nesdev.com/w/index.php/PPU_scrolling
-		let byte = self.load(0x23C0 | (v & 0x0C00) | ((v >> 4) & 0x38) | ((v >> 2) & 0x07), rom);
 
 		// byte includes four two bits
 		// 7-6: bottom right
@@ -704,32 +554,18 @@ impl Ppu {
 				}
 			}
 		};
-
-		let value = (byte >> pos) & 0x3;
-
-		self.attribute_table_high_latch = match value & 2 {
-			2 => 0xff,
-			_ => 0
-		};
-
-		self.attribute_table_low_latch = match value & 1 {
-			1 => 0xff,
-			_ => 0
-		};
 	}
 
 	fn fetch_pattern_table_low(&mut self, rom: &Rom) {
 		let fine_scroll_y = (self.current_vram_address >> 12) & 0x7;
 		let index = self.ppuctrl.background_pattern_table_base_address() +
 			((self.name_table.load() as u16) << 4) + fine_scroll_y;
-		self.pattern_table_low_latch = self.load(index, rom);
 	}
 
 	fn fetch_pattern_table_high(&mut self, rom: &Rom) {
 		let fine_scroll_y = (self.current_vram_address >> 12) & 0x7;
 		let index = self.ppuctrl.background_pattern_table_base_address() +
 			((self.name_table.load() as u16) << 4) + fine_scroll_y;
-		self.pattern_table_high_latch = self.load(index + 0x8, rom);
 	}
 
 	fn update_flags(&mut self, rom: &mut Rom) {
@@ -741,7 +577,6 @@ impl Ppu {
 				}
 				self.suppress_vblank = false;
 				// Pixels for this frame should be ready so update the display
-				self.display.vblank();
 			} else if self.scanline == 261 {
 				// clear vblank, sprite zero hit flag,
 				// and sprite overflow flags at cycle 1 in pre-render line 261
@@ -788,12 +623,6 @@ impl Ppu {
 
 		// @TODO: check this driving IRQ counter for MMC3Mapper timing is correct
 		// @TODO: This is MMC3Mapper specific. Should this be here?
-
-		if self.cycle == 340 && self.scanline <= 240 &&
-			self.ppumask.is_background_visible() &&
-			rom.irq_interrupted() {
-				self.irq_interrupted = true
-		}
 	}
 
 	fn countup_scroll_counters(&mut self) {
@@ -917,124 +746,9 @@ impl Ppu {
 		} else if self.cycle == 257 {
 			// Evaluate at a time at cycle 257 due to performance
 			// and simplicity so far
-			self.process_sprite_pixels(rom);
 		}
 	}
 
-	fn process_sprite_pixels(&mut self, rom: &Rom) {
-		for i in 0..self.sprite_availables.len() {
-			self.sprite_availables[i] = false;
-		}
-
-		let y = self.scanline as u8;
-		let height = self.ppuctrl.sprite_height();
-		let mut n = 0;
-
-		// Find up to eight sprite on this scan line from primary OAM and
-		// copy them to secondary OAM.
-		// And process all bits of a scanline for sprites here now
-		// for the performance and simplicity.
-		for i in 0..64 {
-			let s = self.primary_oam.get(i);
-			if s.on(y, height) {
-				if n >= 8 {
-					// Set sprite overflow flag if
-					// more than eight sprites appear on a scanline
-					self.ppustatus.set_overflow();
-					break;
-				}
-				let base_x = s.get_x();
-				let y_in_sprite = s.get_y_in_sprite(y, height);
-				let msb = s.get_palette_num() as u16;
-				for j in 0..8 {
-					//
-					if base_x as u16 + j as u16 >= 256 {
-						break;
-					}
-					let x = base_x + j;
-					// No override with later sprites
-					if self.sprite_availables[x as usize] {
-						continue;
-					}
-					let x_in_sprite = match s.horizontal_flip() {
-						true => 7 - j,
-						false => j
-					};
-					// pattern table holds the lowest two bits of palette memory address
-					let lsb = self.get_pattern_table_element_for_sprite(&s, x_in_sprite, y_in_sprite, height, rom) as u16;
-					// the lowest two 0 bits means transparent (=no sprite pixel)
-					if lsb != 0 {
-						self.sprite_availables[x as usize] = true;
-						// Sprite palette indices are in 0x3F10-0x3F1F
-						self.sprite_palette_addresses[x as usize] = 0x3F10 | (msb << 2) | lsb;
-						self.sprite_ids[x as usize] = i;
-						self.sprite_priorities[x as usize] = s.get_priority();
-					}
-				}
-				self.secondary_oam.copy(n, s);
-				n += 1;
-			}
-		}
-	}
-
-	fn get_name_table_address_with_mirroring(&self, address: u16, rom: &Rom) -> u16 {
-		let name_table_address = address & 0x2C00;
-		(address & 0x3FF) | match rom.mirroring_type() {
-			Mirrorings::SingleScreen => 0x2000,
-			Mirrorings::Horizontal => match name_table_address {
-				0x2000 => 0x2000,
-				0x2400 => 0x2000,
-				0x2800 => 0x2800,
-				_ /* 0x2C00 */ => 0x2800
-			},
-			Mirrorings::Vertical => match name_table_address {
-				0x2000 => 0x2000,
-				0x2400 => 0x2400,
-				0x2800 => 0x2000,
-				_ /* 0x2C00 */ => 0x2400
-			},
-			Mirrorings::FourScreen => name_table_address
-		}
-	}
-
-	fn get_pattern_table_element_for_sprite(&self, s: &Sprite, x_in_sprite: u8, y_in_sprite: u8, height: u8, rom: &Rom) -> u8 {
-		// Get an element from pattern table consisting of the lowest two bits
-		// of palette memory address for sprites
-
-		// 8x8 sprite and 8x16 sprite calculates tile address differently
-		let address = match height == 8 {
-			true => {
-				// 8x8 sprite
-				// ppuctrl selects base address 0x0000 or 0x1000
-				let base_address = self.ppuctrl.sprite_pattern_table_base_address();
-				// Each tile has 16bytes
-				let byte_offset = s.get_tile_index() as u16 * 0x10;
-				// A tile has 8x2 rows
-				let row = y_in_sprite as u16;
-				base_address + byte_offset + row
-			},
-			false => {
-				// 8x16 sprite
-				// Ignore base address selected by ppuctrl but
-				// 0-bit of sprite tile_index selects 0x0000 or 0x1000 
-				let tile_index = s.get_tile_index() as u16;
-				let base_address = (tile_index & 1) * 0x1000;
-				// 7-1 bits of tile_index maps to 0-254 tiles
-				let byte_offset = (tile_index & 0xFE) * 0x10;
-				// Eatch 16-byte tile has 8x8 pixels then bottom half pixel needs to see next tile
-				let row = ((y_in_sprite % 8) + ((y_in_sprite & 0x8) << 1)) as u16;
-				base_address + byte_offset + row
-			}
-		};
-
-		// Each tile has 16bytes (8x2 rows)
-		// The first 8bytes in a tile are for 0-bit,
-		// while the second 8bytes are for 1-bit of palette memory address
-		let lower_bits = self.load(address, rom);
-		let higher_bits = self.load(address + 8, rom);
-		let pos = 7 - x_in_sprite; // xxx_bits[7:0] corresponds to x_in_sprite[0:7] 
-		(((higher_bits >> pos) & 1) << 1) | ((lower_bits >> pos) & 1)
-	}
 
 	fn load_palette(&self, address: u8) -> u32 {
 		// In greyscale mode, mask the palette index with 0x30 and
@@ -1060,16 +774,13 @@ impl Ppu {
 		}
 		c
 	}
-
-	pub fn get_display(&self) -> &Box<dyn Display> {
-		&self.display
-	}
 }
 
 // PPU control 8-bit register.
 // CPU memory-mapped at 0x2000
 // Write-only
 
+#[derive(Serialize, Deserialize)]
 pub struct PpuControlRegister {
 	register: Register<u8>
 }
@@ -1150,6 +861,7 @@ impl PpuControlRegister {
 // PPU mask 8-bit register
 // CPU memory-mapped at 0x2001
 // Write-only
+#[derive(Serialize, Deserialize)]
 pub struct PpuMaskRegister {
 	register: Register<u8>
 }
@@ -1218,6 +930,7 @@ impl PpuMaskRegister {
 // PPU status 8-bit register
 // CPU memory-mapped at 0x2002
 // Read-only
+#[derive(Serialize, Deserialize)]
 pub struct PpuStatusRegister {
 	register: Register<u8>
 }
@@ -1277,6 +990,7 @@ impl PpuStatusRegister {
 	}
 }
 
+#[derive(Serialize, Deserialize)]
 pub struct SpritesManager {
 	memory: Memory
 }

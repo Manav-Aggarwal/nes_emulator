@@ -1,8 +1,5 @@
-pub mod apu;
-pub mod audio;
 pub mod button;
 pub mod cpu;
-pub mod default_audio;
 pub mod default_display;
 pub mod default_input;
 pub mod display;
@@ -14,8 +11,6 @@ pub mod ppu;
 pub mod register;
 pub mod rom;
 
-use audio::Audio;
-use button::Button;
 use cpu::Cpu;
 use display::Display;
 use input::Input;
@@ -73,9 +68,9 @@ impl Nes {
     /// * `input` For pad input
     /// * `display` For screen output
     /// * `audio` For audio output
-    pub fn new(input: Box<dyn Input>, display: Box<dyn Display>, audio: Box<dyn Audio>) -> Self {
+    pub fn new(input: Box<dyn Input>, display: Box<dyn Display>) -> Self {
         Nes {
-            cpu: Cpu::new(input, display, audio),
+            cpu: Cpu::new(input, display),
         }
     }
 
@@ -112,37 +107,16 @@ impl Nes {
     ///
     /// # Arguments
     /// * `pixels`
-    pub fn copy_pixels(&self, pixels: &mut [u8]) {
-        self.cpu.get_ppu().get_display().copy_to_rgba_pixels(pixels);
-    }
-
-    /// Copies audio buffer to passed buffer.
-    /// The length and result should be specific to `audio` passed via the constructor.
-    ///
-    /// # Arguments
-    /// * `buffer`
-    pub fn copy_sample_buffer(&mut self, buffer: &mut [f32]) {
-        self.cpu
-            .get_mut_apu()
-            .get_mut_audio()
-            .copy_sample_buffer(buffer);
-    }
-
     /// Presses a pad button
     ///
     /// # Arguments
     /// * `button`
-    pub fn press_button(&mut self, button: Button) {
-        self.cpu.get_mut_input().press(button);
-    }
+
 
     /// Releases a pad button
     ///
     /// # Arguments
     /// * `buffer`
-    pub fn release_button(&mut self, button: Button) {
-        self.cpu.get_mut_input().release(button);
-    }
 
     /// Checks if NES console is powered on
     pub fn is_power_on(&self) -> bool {
