@@ -19,7 +19,7 @@ use nes_rust_core::default_input::DefaultInput;
 use nes_rust_core::default_audio::DefaultAudio;
 use nes_rust_core::default_display::DefaultDisplay;
 
-fn operate_return(&mut cpu, Operation op) -> cpu {
+fn run_guest(&mut cpu, Operation op) -> cpu {
     let env = ExecutorEnv::builder()
         .write(&cpu)
         .unwrap()
@@ -43,7 +43,13 @@ fn operate_return(&mut cpu, Operation op) -> cpu {
 }
 
 fn main() {
-    
+    let input = Box::new(DefaultInput::new());
+    let display = Box::new(DefaultDisplay::new());
+    let audio = Box::new(DefaultAudio::new());
+    let mut cpu = Cpu::new(input, display, audio);
+    let mut_cpu: &mut Cpu= cpu.get_mut_cpu();
+    let op = operation(0x01);
+    run_guest(&mut_cpu, op);
 }
 
 #[cfg(test)]
@@ -62,5 +68,6 @@ mod tests {
 
         let op = operation(0x01);
         let new_cpu = cpu.operate_return(&op);
+        
     }
 }
