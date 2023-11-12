@@ -19,7 +19,7 @@ use nes_rust_core::default_input::DefaultInput;
 use nes_rust_core::default_audio::DefaultAudio;
 use nes_rust_core::default_display::DefaultDisplay;
 
-fn run_guest(&mut cpu, Operation op) -> cpu {
+fn run_guest(&mut cpu: Cpu, operation: Operation) -> cpu {
     let env = ExecutorEnv::builder()
         .write(&cpu)
         .unwrap()
