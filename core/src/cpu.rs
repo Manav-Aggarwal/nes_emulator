@@ -1723,6 +1723,7 @@ impl Cpu {
         }
     }
 
+    #[cfg(not(target_os = "zkvm"))]
     pub fn operate_return(&mut self, op: &Operation) -> &mut Cpu {
         match op.instruction_type {
             InstructionTypes::ADC => {
