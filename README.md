@@ -15,7 +15,8 @@ This delivers the primary benefits:
 
 _Acknowledgements
 Project inspired by Tonk’s Dappicom and to takahirox for nes-rust._
-![Uploading Screen Shot 2023-11-12 at 11.27.10 AM.png…]()
+
+<img width="291" alt="Screen Shot 2023-11-12 at 11 27 10 AM" src="https://github.com/Manav-Aggarwal/nes_emulator/assets/35550889/4926d2a2-a026-4fce-b2ef-fce2060923e9">
 
 
 # RISC Zero Rust Starter Template
