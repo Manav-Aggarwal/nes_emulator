@@ -1,5 +1,6 @@
 # RISC: Global Domination
-<img width="872" alt="Screen Shot 2023-11-12 at 11 21 03 AM" src="https://github.com/Manav-Aggarwal/nes_emulator/assets/35550889/6fca2903-b93b-43e5-a45b-08f19292be7f" class="center">
+<p align="center">
+<img width="872" alt="Screen Shot 2023-11-12 at 11 21 03 AM" src="https://github.com/Manav-Aggarwal/nes_emulator/assets/35550889/6fca2903-b93b-43e5-a45b-08f19292be7f" class="center"></p>
 
 Cheating in video games has accelerated in advancement – now, players employ methods such as bots and software assistance to perform automated target acquisition and calibration, lag switches, and world-hacking. The vision of autonomous worlds is enabled only by provability of all in-game actions. Players must be able to prove ownership and milestone-based achievements in order for the autonomous world itself to create digital scarcity and programmable ruleset based environments independent of control from a centralized authority. In this project, we build the foundation for autonomous worlds by using Bonsai to prove gameplay.
 
@@ -15,8 +16,8 @@ This delivers the primary benefits:
 
 _Acknowledgements
 Project inspired by Tonk’s Dappicom and to takahirox for nes-rust._
-
-<img width="291" alt="Screen Shot 2023-11-12 at 11 27 10 AM" src="https://github.com/Manav-Aggarwal/nes_emulator/assets/35550889/4926d2a2-a026-4fce-b2ef-fce2060923e9" class="center">
+<p align="center">
+<img width="291" alt="Screen Shot 2023-11-12 at 11 27 10 AM" src="https://github.com/Manav-Aggarwal/nes_emulator/assets/35550889/4926d2a2-a026-4fce-b2ef-fce2060923e9"></p>
 
 
 # RISC Zero Rust Starter Template
