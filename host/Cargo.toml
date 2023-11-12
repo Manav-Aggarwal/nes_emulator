@@ -1,0 +1,17 @@
+[package]
+name = "host"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+nes-emulator-methods = { path = "../methods" }
+nes-rust-core = { path = "../core" }
+risc0-zkvm = { version = "0.19.1" }
+env_logger = "0.10"
+serde = "1.0"
+test-log = "0.2"
+
+[features]
+cuda = ["risc0-zkvm/cuda"]
+default = []
+metal = ["risc0-zkvm/metal"]
